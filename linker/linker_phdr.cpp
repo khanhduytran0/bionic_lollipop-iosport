@@ -35,6 +35,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <stdio.h>
+
 #include "linker.h"
 #include "linker_debug.h"
 
@@ -319,7 +321,7 @@ bool ElfReader::ReserveAddressSpace(const android_dlextinfo* extinfo) {
     int mmap_flags = MAP_PRIVATE | MAP_ANONYMOUS;
     start = mmap(addr, load_size_, PROT_NONE, mmap_flags, -1, 0);
     if (start == MAP_FAILED) {
-      DL_ERR("couldn't reserve %zd bytes of address space for \"%s\"", load_size_, name_);
+      DL_ERR("couldn't reserve %d bytes of address space for \"%s\":  %s", load_size_, name_, strerror(errno));
       return false;
     }
   } else {

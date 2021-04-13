@@ -39,7 +39,9 @@ void __atexit_handler_wrapper(void* func) {
   }
 }
 
+#ifndef __APPLE__
 __attribute__ ((visibility ("hidden")))
 int atexit(void (*func)(void)) {
   return (__cxa_atexit(&__atexit_handler_wrapper, func, &__dso_handle));
 }
+#endif

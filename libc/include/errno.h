@@ -28,6 +28,7 @@
 #ifndef _ERRNO_H
 #define _ERRNO_H
 
+#ifndef __APPLE__
 #include <sys/cdefs.h>
 #include <linux/errno.h>
 
@@ -48,4 +49,7 @@ extern volatile int* __errno(void) __pure2;
 
 __END_DECLS
 
+#else
+#include <sys/errno.h>
+#endif
 #endif /* _ERRNO_H */

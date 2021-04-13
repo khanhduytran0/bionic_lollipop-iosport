@@ -31,16 +31,37 @@
 
 static pthread_mutex_t g_dl_mutex = PTHREAD_RECURSIVE_MUTEX_INITIALIZER;
 
+#ifdef __APPLE__
+#define __BIONIC_DLERROR_BUFFER_SIZE 512
+char dlerror_value[__BIONIC_DLERROR_BUFFER_SIZE];
+
+void*(*dlsym_darwin)(void* handle, const char* symbol);
+char*(*dlerror_darwin)(void);
+#endif
+
 static const char* __bionic_set_dlerror(char* new_value) {
+#ifndef __APPLE__
   char** dlerror_slot = &reinterpret_cast<char**>(__get_tls())[TLS_SLOT_DLERROR];
 
   const char* old_value = *dlerror_slot;
   *dlerror_slot = new_value;
   return old_value;
+#else
+  if (new_value != NULL) {
+    return NULL;
+  } else {
+    return dlerror_value;
+  }
+#endif
 }
 
 static void __bionic_format_dlerror(const char* msg, const char* detail) {
+#ifndef __APPLE__
   char* buffer = __get_thread()->dlerror_buffer;
+#else
+  // char buffer[__BIONIC_DLERROR_BUFFER_SIZE];
+  char *buffer = dlerror_value;
+#endif
   strlcpy(buffer, msg, __BIONIC_DLERROR_BUFFER_SIZE);
   if (detail != NULL) {
     strlcat(buffer, ": ", __BIONIC_DLERROR_BUFFER_SIZE);
@@ -124,6 +145,13 @@ void* dlsym(void* handle, const char* symbol) {
     __bionic_format_dlerror("symbol found but not global", symbol);
     return NULL;
   } else {
+#ifdef __APPLE__
+    if (dlsym_darwin) {
+        void *result = dlsym_darwin(handle, symbol);
+        __bionic_set_dlerror(dlerror_darwin());
+        return result;
+    }
+#endif
     __bionic_format_dlerror("undefined symbol", symbol);
     return NULL;
   }

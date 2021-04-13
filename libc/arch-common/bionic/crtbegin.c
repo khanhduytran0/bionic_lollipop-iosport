@@ -30,6 +30,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifndef __APPLE__
 __attribute__ ((section (".preinit_array")))
 void (*__PREINIT_ARRAY__)(void) = (void (*)(void)) -1;
 
@@ -38,6 +39,16 @@ void (*__INIT_ARRAY__)(void) = (void (*)(void)) -1;
 
 __attribute__ ((section (".fini_array")))
 void (*__FINI_ARRAY__)(void) = (void (*)(void)) -1;
+#else
+__attribute__ ((section ("__DATA,.preinit_array")))
+void (*__PREINIT_ARRAY__)(void) = (void (*)(void)) -1;
+
+__attribute__ ((section ("__DATA,.init_array")))
+void (*__INIT_ARRAY__)(void) = (void (*)(void)) -1;
+
+__attribute__ ((section ("__DATA,.fini_array")))
+void (*__FINI_ARRAY__)(void) = (void (*)(void)) -1;
+#endif
 
 __LIBC_HIDDEN__
 #ifdef __i386__

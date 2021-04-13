@@ -115,8 +115,13 @@
 #define MB_LEN_MAX 4
 
 /* New code should use sysconf(_SC_PAGE_SIZE) instead. */
+// FIXME 4kb -> 16kb page size conversion?
 #ifndef PAGE_SIZE
+#ifndef __APPLE__
 #define PAGE_SIZE 4096
+#else
+#define PAGE_SIZE 16384
+#endif
 #endif
 #ifndef PAGESIZE
 #define  PAGESIZE  PAGE_SIZE

@@ -30,9 +30,17 @@
 #ifndef CRT_LEGACY_WORKAROUND
 __attribute__ ((visibility ("hidden")))
 #endif
+#ifndef __APPLE__
 #ifdef __aarch64__
 __attribute__ ((section (".data")))
 #else
 __attribute__ ((section (".bss")))
+#endif
+#else
+#ifdef __aarch64__
+__attribute__ ((section ("__DATA,.data")))
+#else
+__attribute__ ((section ("__DATA,.bss")))
+#endif
 #endif
 void *__dso_handle = (void *) 0;

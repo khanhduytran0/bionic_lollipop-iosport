@@ -302,8 +302,10 @@ static soinfo* soinfo_alloc(const char* name, struct stat* file_stat) {
     si->set_st_ino(file_stat->st_ino);
   }
 
-  sonext->next = si;
-  sonext = si;
+  if(sonext) {
+    sonext->next = si;
+    sonext = si;
+  }
 
   TRACE("name %s: allocated soinfo @ %p", name, si);
   return si;
@@ -954,8 +956,19 @@ static int soinfo_relocate(soinfo* si, ElfW(Rela)* rela, unsigned count, soinfo*
         // We only allow an undefined symbol if this is a weak reference...
         s = &si->symtab[sym];
         if (ELF_ST_BIND(s->st_info) != STB_WEAK) {
-          DL_ERR("cannot locate symbol \"%s\" referenced by \"%s\"...", sym_name, si->name);
-          return -1;
+#ifndef __APPLE__
+            DL_ERR("cannot locate symbol \"%s\" referenced by \"%s\"...", sym_name, si->name);
+            return -1;
+#else
+          void* sym_darwin = dlsym(RTLD_NEXT, sym_name);
+          if (!sym_darwin) {
+            DL_ERR("cannot locate symbol \"%s\" referenced by \"%s\"...", sym_name, si->name);
+            return -1;
+          } else {
+            sym_addr = static_cast<ElfW(Addr)>((long) sym_darwin);
+            // printf("Got Darwin %s addr=%p\n", sym_name, sym_addr);
+          }
+#endif
         }
 
         /* IHI0044C AAELF 4.5.1.1:
@@ -1928,9 +1941,10 @@ static bool soinfo_link_image(soinfo* si, const android_dlextinfo* extinfo) {
             soinfo* lsi = find_library(library_name, 0, NULL);
             if (lsi == NULL) {
                 strlcpy(tmp_err_buf, linker_get_error_buffer(), sizeof(tmp_err_buf));
-                DL_ERR("could not load library \"%s\" needed by \"%s\"; caused by %s",
+                DL_WARN("could not load library \"%s\" needed by \"%s\"; caused by %s",
                        library_name, si->name, tmp_err_buf);
-                return false;
+                // return false;
+                continue;
             }
 
             si->add_child(lsi);
@@ -2228,7 +2242,7 @@ static ElfW(Addr) __linker_init_post_relocation(KernelArgumentBlock& args, ElfW(
         unsigned n;
         unsigned i;
         unsigned count = 0;
-        for (n = 0; n < 4096; n++) {
+        for (n = 0; n < PAGE_SIZE; n++) { // 4096
             if (bitmask[n]) {
                 unsigned x = bitmask[n];
 #if defined(__LP64__)
@@ -2280,6 +2294,14 @@ static ElfW(Addr) get_elf_exec_load_bias(const ElfW(Ehdr)* elf) {
 
 extern "C" void _start();
 
+#ifdef __APPLE__
+extern "C" void __linker_init_mini() {
+  // Initialize static variables.
+  solist = get_libdl_info();
+  sonext = get_libdl_info();
+}
+#endif
+
 /*
  * This is the entry point for the linker, called from begin.S. This
  * method is responsible for fixing the linker's own relocations, and
@@ -2310,9 +2332,11 @@ extern "C" ElfW(Addr) __linker_init(void* raw_args) {
   //
   // This happens when user tries to run 'adb shell /system/bin/linker'
   // see also https://code.google.com/p/android/issues/detail?id=63174
+#ifndef __APPLE__
   if (reinterpret_cast<ElfW(Addr)>(&_start) == entry_point) {
     __libc_fatal("This is %s, the helper program for shared library executables.\n", args.argv[0]);
   }
+#endif
 
   strcpy(linker_so.name, "[dynamic linker]");
   linker_so.base = linker_addr;

@@ -30,6 +30,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifndef __APPLE__
 __attribute__ ((section (".preinit_array")))
 void (*__PREINIT_ARRAY__)(void) = (void (*)(void)) -1;
 
@@ -38,6 +39,16 @@ void (*__INIT_ARRAY__)(void) = (void (*)(void)) -1;
 
 __attribute__ ((section (".fini_array")))
 void (*__FINI_ARRAY__)(void) = (void (*)(void)) -1;
+#else
+__attribute__ ((section ("__DATA,.preinit_array")))
+void (*__PREINIT_ARRAY__)(void) = (void (*)(void)) -1;
+
+__attribute__ ((section ("__DATA,.init_array")))
+void (*__INIT_ARRAY__)(void) = (void (*)(void)) -1;
+
+__attribute__ ((section ("__DATA,.fini_array")))
+void (*__FINI_ARRAY__)(void) = (void (*)(void)) -1;
+#endif
 
 
 __LIBC_HIDDEN__ void do_arm64_start(void* raw_args) {
@@ -57,12 +68,12 @@ __asm__ (
 "        .text                      \n"
 "        .align  2                  \n"
 "        .global _start             \n"
-"        .hidden _start             \n"
-"        .type   _start, %function  \n"
+// "        .hidden _start             \n"
+// "        .type   _start, %function  \n"
 "_start:                            \n"
 "        add     x0, sp, xzr        \n"
 "        b       do_arm64_start   \n"
-"        .size   _start, .-_start   \n"
+// "        .size   _start, .-_start   \n"
 );
 
 #include "../../arch-common/bionic/__dso_handle.h"
