@@ -2,7 +2,7 @@
 Bionic Lollipop release, but linker was ported to jailbroken iOS.
 
 ## Features
-- can load ELF .so file (even file with page size 4kb on 16kb devices).
+- can load ELF .so file (even file with page size 4kb on 16kb devices for unknown reason).
 - lib depends are being warned instead of fatal error if not found (workaround ignoring libc.so, libm.so and other libraries).
 - symbols lookup will find to Darwin symbols if none found in loaded ELF libraries.
 - tweaked to print all of undefined symbols.
