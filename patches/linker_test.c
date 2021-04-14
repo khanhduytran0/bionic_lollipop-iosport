@@ -42,7 +42,7 @@ int main(int argc, char** argv) {
     printf("%s\n", dlerror_p());
     android_update_LD_LIBRARY_PATH_p(getenv("PWD"));
     // sprintf(out_name, "%s/%s", getenv("PWD"), realpath("
-    void *test_handle = dlopen_p(realpath("libart.so", 0), RTLD_LAZY);
+    void *test_handle = dlopen_p(realpath("libtest.so", 0), RTLD_LAZY);
     // dlopen_p("/usr/android/system/lib64/libtest.so", RTLD_LAZY);
     if (!test_handle) {
         printf("%s\n", dlerror_p());
