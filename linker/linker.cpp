@@ -935,6 +935,10 @@ void do_dlclose(soinfo* si) {
 
 #if defined(USE_RELA)
 static int soinfo_relocate(soinfo* si, ElfW(Rela)* rela, unsigned count, soinfo* needed[]) {
+#ifdef __APPLE__
+  bool did_error = false;
+#endif
+
   ElfW(Sym)* s;
   soinfo* lsi;
 
@@ -962,8 +966,10 @@ static int soinfo_relocate(soinfo* si, ElfW(Rela)* rela, unsigned count, soinfo*
 #else
           void* sym_darwin = dlsym(RTLD_NEXT, sym_name);
           if (!sym_darwin) {
-            DL_ERR("cannot locate symbol \"%s\" referenced by \"%s\"...", sym_name, si->name);
-            return -1;
+            did_error = true;
+            // Print all of undefined symbols as dyld behavior and return error.
+            DL_WARN("cannot locate symbol \"%s\" referenced by \"%s\"...", sym_name, si->name);
+            // return -1;
           } else {
             sym_addr = static_cast<ElfW(Addr)>((long) sym_darwin);
             // printf("Got Darwin %s addr=%p\n", sym_name, sym_addr);
@@ -1204,6 +1210,12 @@ static int soinfo_relocate(soinfo* si, ElfW(Rela)* rela, unsigned count, soinfo*
       return -1;
     }
   }
+#ifdef __APPLE__
+  if (did_error) {
+    DL_ERR("cannot locate symbols referenced by \"%s\", see log above for more details.", si->name);
+    return -1;
+  }
+#endif
   return 0;
 }
 

@@ -81,6 +81,7 @@ void android_get_LD_LIBRARY_PATH(char* buffer, size_t buffer_size) {
   do_android_get_LD_LIBRARY_PATH(buffer, buffer_size);
 }
 
+extern "C"
 void android_update_LD_LIBRARY_PATH(const char* ld_library_path) {
   ScopedPthreadMutexLocker locker(&g_dl_mutex);
   do_android_update_LD_LIBRARY_PATH(ld_library_path);
