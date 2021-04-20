@@ -10,7 +10,7 @@ void* (*dlopen_p)(const char *, int);
 void* (*dlsym_p)(void *, const char *);
 int (*dlclose_p)(void *);
 char* (*dlerror_p)(void);
-void (*__linker_init_mini_p)();
+void (*__linker_init_mini_p)(int argc, char** argv);
 void* dlsym_darwin_p;
 void* dlerror_darwin_p;
 
@@ -36,8 +36,16 @@ int main(int argc, char** argv) {
     BIND_METHOD(linker, __linker_init_mini);
     *((void**) dlsym_darwin_p) = dlsym;
     *((void**) dlerror_darwin_p) = dlerror;
-
-    __linker_init_mini_p();
+    
+    if (argc == 1) {
+      printf("Usage: %s [executable] [args...]\n", argv[0]);
+      return -1;
+    }
+    
+    __linker_init_mini_p(argc - 1, &argv[1]);
+    
+/*
+    __linker_init_mini_p(0, NULL);
 
     printf("%s\n", dlerror_p());
     android_update_LD_LIBRARY_PATH_p(getenv("PWD"));
@@ -59,4 +67,5 @@ int main(int argc, char** argv) {
     printf("loaded helloTest = %p\n", test_func);
 
     test_func();
+*/
 }

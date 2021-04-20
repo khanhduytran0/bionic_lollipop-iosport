@@ -46,7 +46,11 @@ static void __init_AT_SECURE(KernelArgumentBlock& args) {
   // Check auxv for AT_SECURE first to see if program is setuid, setgid,
   // has file caps, or caused a SELinux/AppArmor domain transition.
   bool kernel_supplied_AT_SECURE;
+#ifndef __APPLE__
   _AT_SECURE_value = args.getauxval(AT_SECURE, &kernel_supplied_AT_SECURE);
+#else
+  _AT_SECURE_value = kernel_supplied_AT_SECURE = true;
+#endif
 
   // We don't support ancient kernels.
   if (!kernel_supplied_AT_SECURE) {
@@ -76,7 +80,7 @@ static const char* env_match(const char* envstr, const char* name) {
 static bool __is_valid_environment_variable(const char* name) {
   // According to its sources, the kernel uses 32*PAGE_SIZE by default
   // as the maximum size for an env. variable definition.
-  const int MAX_ENV_LEN = 32*4096;
+  const int MAX_ENV_LEN = 32*PAGE_SIZE;
 
   if (name == NULL) {
     return false;
@@ -147,6 +151,9 @@ static bool __is_unsafe_environment_variable(const char* name) {
 }
 
 static void __sanitize_environment_variables() {
+#ifdef __APPLE__
+  if (_envp == NULL) return;
+#endif
   char** src  = _envp;
   char** dst = _envp;
   for (; src[0] != NULL; ++src) {
@@ -172,6 +179,10 @@ void linker_env_init(KernelArgumentBlock& args) {
 }
 
 const char* linker_env_get(const char* name) {
+#ifdef __APPLE__
+  if (_envp == NULL) return getenv(name);
+#endif
+
   if (name == NULL || name[0] == '\0') {
     return NULL;
   }

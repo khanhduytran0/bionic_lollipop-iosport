@@ -32,6 +32,12 @@ struct abort_msg_t;
 // constituents for easy access.
 class KernelArgumentBlock {
  public:
+  KernelArgumentBlock(int margc, char** margv, char** menvp) {
+    argc = margc;
+    argv = margv;
+    envp = menvp;
+  }
+ 
   KernelArgumentBlock(void* raw_args) {
     uintptr_t* args = reinterpret_cast<uintptr_t*>(raw_args);
     argc = static_cast<int>(*args);
@@ -53,6 +59,7 @@ class KernelArgumentBlock {
   // so it's safe to call this really early on. This function also lets you distinguish
   // between the inability to find the given type and its value just happening to be 0.
   unsigned long getauxval(unsigned long type, bool* found_match = NULL) {
+    if (auxv == NULL) return 0;
     for (ElfW(auxv_t)* v = auxv; v->a_type != AT_NULL; ++v) {
       if (v->a_type == type) {
         if (found_match != NULL) {

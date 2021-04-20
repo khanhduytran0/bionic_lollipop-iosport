@@ -933,12 +933,30 @@ void do_dlclose(soinfo* si) {
   protect_data(PROT_READ);
 }
 
-#if defined(USE_RELA)
-static int soinfo_relocate(soinfo* si, ElfW(Rela)* rela, unsigned count, soinfo* needed[]) {
 #ifdef __APPLE__
-  bool did_error = false;
+static int relocate_darwin(ElfW(Addr)* sym_addr, soinfo* si, const char* sym_name) {
+  void* sym_darwin;
+  // wrapped symbols
+  if (strcmp(sym_name, "__errno") == 0) {
+    sym_darwin = dlsym(RTLD_NEXT, "__error");
+  } else if (strcmp(sym_name, "lseek64") == 0) {
+    sym_darwin = dlsym(RTLD_NEXT, "lseek");
+  } else {
+    sym_darwin = dlsym(RTLD_NEXT, sym_name);
+  }
+  if (!sym_darwin) {
+    DL_WARN("cannot locate symbol \"%s\" referenced by \"%s\"...", sym_name, si->name);
+  } else {
+    *sym_addr = static_cast<ElfW(Addr)>((long) sym_darwin);
+    TRACE("Got Darwin %s addr=%p", sym_name, sym_addr);
+  }
+  return sym_darwin == NULL ? -1 : 0;
+}
 #endif
 
+#if defined(USE_RELA)
+static int soinfo_relocate(soinfo* si, ElfW(Rela)* rela, unsigned count, soinfo* needed[]) {
+  bool did_undefined = false;
   ElfW(Sym)* s;
   soinfo* lsi;
 
@@ -961,18 +979,12 @@ static int soinfo_relocate(soinfo* si, ElfW(Rela)* rela, unsigned count, soinfo*
         s = &si->symtab[sym];
         if (ELF_ST_BIND(s->st_info) != STB_WEAK) {
 #ifndef __APPLE__
-            DL_ERR("cannot locate symbol \"%s\" referenced by \"%s\"...", sym_name, si->name);
-            return -1;
+          DL_ERR("cannot locate symbol \"%s\" referenced by \"%s\"...", sym_name, si->name);
+          return -1;
 #else
-          void* sym_darwin = dlsym(RTLD_NEXT, sym_name);
-          if (!sym_darwin) {
-            did_error = true;
-            // Print all of undefined symbols as dyld behavior and return error.
-            DL_WARN("cannot locate symbol \"%s\" referenced by \"%s\"...", sym_name, si->name);
-            // return -1;
-          } else {
-            sym_addr = static_cast<ElfW(Addr)>((long) sym_darwin);
-            // printf("Got Darwin %s addr=%p\n", sym_name, sym_addr);
+          if (relocate_darwin(&sym_addr, si, sym_name) == -1) {
+            did_undefined = true;
+            continue;
           }
 #endif
         }
@@ -1210,18 +1222,17 @@ static int soinfo_relocate(soinfo* si, ElfW(Rela)* rela, unsigned count, soinfo*
       return -1;
     }
   }
-#ifdef __APPLE__
-  if (did_error) {
-    DL_ERR("cannot locate symbols referenced by \"%s\", see log above for more details.", si->name);
+  if (did_undefined) {
+    DL_ERR("cannot locate symbols referenced by \"%s\"...", si->name);
     return -1;
   }
-#endif
   return 0;
 }
 
 #else // REL, not RELA.
 
 static int soinfo_relocate(soinfo* si, ElfW(Rel)* rel, unsigned count, soinfo* needed[]) {
+    bool did_undefined = false;
     ElfW(Sym)* s;
     soinfo* lsi;
 
@@ -1244,8 +1255,15 @@ static int soinfo_relocate(soinfo* si, ElfW(Rel)* rel, unsigned count, soinfo* n
                 // We only allow an undefined symbol if this is a weak reference...
                 s = &si->symtab[sym];
                 if (ELF_ST_BIND(s->st_info) != STB_WEAK) {
-                    DL_ERR("cannot locate symbol \"%s\" referenced by \"%s\"...", sym_name, si->name);
-                    return -1;
+#ifndef __APPLE__
+                  DL_ERR("cannot locate symbol \"%s\" referenced by \"%s\"...", sym_name, si->name);
+                  return -1;
+#else
+                  if (relocate_darwin(&sym_addr, si, sym_name) == -1) {
+                    did_undefined = true;
+                    continue;
+                  }
+#endif
                 }
 
                 /* IHI0044C AAELF 4.5.1.1:
@@ -1413,7 +1431,8 @@ static int soinfo_relocate(soinfo* si, ElfW(Rel)* rel, unsigned count, soinfo* n
             return -1;
         }
     }
-    return 0;
+    if (did_undefined) DL_ERR("cannot locate symbols referenced by \"%s\"...", si->name);
+    return did_undefined ? -1 : 0;
 }
 #endif
 
@@ -2092,6 +2111,7 @@ static soinfo linker_soinfo_for_gdb;
  * be on the soinfo list.
  */
 static void init_linker_info_for_gdb(ElfW(Addr) linker_base) {
+  if (linker_base == NULL) return;
 #if defined(__LP64__)
   strlcpy(linker_soinfo_for_gdb.name, "/system/bin/linker64", sizeof(linker_soinfo_for_gdb.name));
 #else
@@ -2127,7 +2147,10 @@ static ElfW(Addr) __linker_init_post_relocation(KernelArgumentBlock& args, ElfW(
      *       to point to a different location to ensure that no other
      *       shared library constructor can access it.
      */
+// FIXME: build Android libc and integrate to linker?
+#ifndef __APPLE__
   __libc_init_tls(args);
+#endif
 
 #if TIMING
     struct timeval t0, t1;
@@ -2143,7 +2166,7 @@ static ElfW(Addr) __linker_init_post_relocation(KernelArgumentBlock& args, ElfW(
         nullify_closed_stdio();
     }
 
-    debuggerd_init();
+    // debuggerd_init();
 
     // Get a few environment variables.
     const char* LD_DEBUG = linker_env_get("LD_DEBUG");
@@ -2162,8 +2185,15 @@ static ElfW(Addr) __linker_init_post_relocation(KernelArgumentBlock& args, ElfW(
 
     INFO("[ android linker & debugger ]");
 
+#ifndef __APPLE__
     soinfo* si = soinfo_alloc(args.argv[0], NULL);
+#else
+    soinfo* si = linker_base == NULL ?
+      do_dlopen(args.argv[0], RTLD_LAZY, NULL) :
+      soinfo_alloc(args.argv[0], NULL);
+#endif
     if (si == NULL) {
+        __libc_format_fd(2, "CANNOT OPEN EXECUTABLE: %s\n", linker_get_error_buffer());
         exit(EXIT_FAILURE);
     }
 
@@ -2180,7 +2210,9 @@ static ElfW(Addr) __linker_init_post_relocation(KernelArgumentBlock& args, ElfW(
     r_debug_tail = map;
 
     init_linker_info_for_gdb(linker_base);
-
+#ifdef __APPLE__
+    if (linker_base != NULL) {
+#endif
     // Extract information passed from the kernel.
     si->phdr = reinterpret_cast<ElfW(Phdr)*>(args.getauxval(AT_PHDR));
     si->phnum = args.getauxval(AT_PHNUM);
@@ -2208,6 +2240,10 @@ static ElfW(Addr) __linker_init_post_relocation(KernelArgumentBlock& args, ElfW(
         __libc_format_fd(2, "error: only position independent executables (PIE) are supported.\n");
         exit(EXIT_FAILURE);
     }
+
+#ifdef __APPLE__
+    }
+#endif
 
     // Use LD_LIBRARY_PATH and LD_PRELOAD (but only if we aren't setuid/setgid).
     parse_LD_LIBRARY_PATH(ldpath_env);
@@ -2307,10 +2343,41 @@ static ElfW(Addr) get_elf_exec_load_bias(const ElfW(Ehdr)* elf) {
 extern "C" void _start();
 
 #ifdef __APPLE__
-extern "C" void __linker_init_mini() {
+extern "C" void __linker_init_mini(int argc, char** argv) {
   // Initialize static variables.
   solist = get_libdl_info();
   sonext = get_libdl_info();
+
+  if (argc == 0) {
+    // If this is a setuid/setgid program, close the security hole described in
+    // ftp://ftp.freebsd.org/pub/FreeBSD/CERT/advisories/FreeBSD-SA-02:23.stdio.asc
+    if (get_AT_SECURE()) {
+        nullify_closed_stdio();
+    }
+
+    debuggerd_init();
+
+    // Get a few environment variables.
+    const char* LD_DEBUG = linker_env_get("LD_DEBUG");
+    if (LD_DEBUG != NULL) {
+      g_ld_debug_verbosity = atoi(LD_DEBUG);
+    }
+
+    // Normally, these are cleaned by linker_env_init, but the test
+    // doesn't cost us anything.
+    const char* ldpath_env = NULL;
+    const char* ldpreload_env = NULL;
+    if (!get_AT_SECURE()) {
+      ldpath_env = linker_env_get("LD_LIBRARY_PATH");
+      ldpreload_env = linker_env_get("LD_PRELOAD");
+    }
+
+    parse_LD_LIBRARY_PATH(ldpath_env);
+    parse_LD_PRELOAD(ldpreload_env);
+  } else {
+    KernelArgumentBlock args(argc, argv, NULL);
+    __linker_init_post_relocation(args, NULL);
+  }
 }
 #endif
 

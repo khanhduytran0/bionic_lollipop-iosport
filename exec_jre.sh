@@ -1,0 +1,1 @@
+./linker_test_jre $@

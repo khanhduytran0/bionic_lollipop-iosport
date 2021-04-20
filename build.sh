@@ -13,6 +13,7 @@ export CFLAGS="\
   -Ilibc/kernel/uapi \
   -Ilibc/kernel/uapi/asm-arm64 \
   -Ilinker \
+  -Ipatches
 "
 
 clang++ -dynamiclib $CFLAGS -o linker64 \
@@ -28,6 +29,9 @@ clang++ -dynamiclib $CFLAGS -o linker64 \
 
 clang -isysroot /var/mobile/theos/sdks/iPhoneOS13.4.sdk $CFLAGS -o linker_test \
   patches/linker_test.c
+
+clang -isysroot /var/mobile/theos/sdks/iPhoneOS13.4.sdk $CFLAGS -o linker_jre_test \
+  patches/linker_jre_test.c
 
 ldid -S linker64
 ldid -S linker_test

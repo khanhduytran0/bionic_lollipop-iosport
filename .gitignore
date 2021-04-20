@@ -1,3 +1,6 @@
 *.pyc
 *.*~
 libc/kernel/original
+/linker_jre_test
+/linker_test
+/linker64
