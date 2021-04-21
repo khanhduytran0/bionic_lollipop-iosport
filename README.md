@@ -18,3 +18,4 @@ Bionic Lollipop release, but linker was ported to jailbroken iOS.
 
 ## To do
 - Create a CMakeLists.txt for building linker64.
+- Use Android's libc for linker.

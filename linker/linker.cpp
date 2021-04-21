@@ -2183,6 +2183,10 @@ static ElfW(Addr) __linker_init_post_relocation(KernelArgumentBlock& args, ElfW(
       ldpreload_env = linker_env_get("LD_PRELOAD");
     }
 
+    // Use LD_LIBRARY_PATH and LD_PRELOAD (but only if we aren't setuid/setgid).
+    parse_LD_LIBRARY_PATH(ldpath_env);
+    parse_LD_PRELOAD(ldpreload_env);
+
     INFO("[ android linker & debugger ]");
 
 #ifndef __APPLE__
@@ -2244,10 +2248,6 @@ static ElfW(Addr) __linker_init_post_relocation(KernelArgumentBlock& args, ElfW(
 #ifdef __APPLE__
     }
 #endif
-
-    // Use LD_LIBRARY_PATH and LD_PRELOAD (but only if we aren't setuid/setgid).
-    parse_LD_LIBRARY_PATH(ldpath_env);
-    parse_LD_PRELOAD(ldpreload_env);
 
     somain = si;
 

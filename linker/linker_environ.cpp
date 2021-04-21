@@ -49,7 +49,8 @@ static void __init_AT_SECURE(KernelArgumentBlock& args) {
 #ifndef __APPLE__
   _AT_SECURE_value = args.getauxval(AT_SECURE, &kernel_supplied_AT_SECURE);
 #else
-  _AT_SECURE_value = kernel_supplied_AT_SECURE = true;
+  _AT_SECURE_value = false;
+  kernel_supplied_AT_SECURE = true;
 #endif
 
   // We don't support ancient kernels.
