@@ -7,7 +7,8 @@ Bionic Lollipop release, but linker was ported to jailbroken iOS.
 - symbols lookup will find to Darwin symbols if none found in loaded ELF libraries.
 - tweaked to print all of undefined symbols.
 
-## Known issues
+## Known issues and limitations
+- only some syscalls translation are handled
 - buggy math (maybe because of page size is different?)
 - too big shared object can lead to loading segment fails.
 - some methods may have constant different compared to Darwin, so I had to wrap them: `mmap()`.
@@ -17,4 +18,4 @@ Bionic Lollipop release, but linker was ported to jailbroken iOS.
 — ~~Maybe port PojavLauncher Android to iOS by this way so I don’t have to rewrite almost everything to objc (need port the entire Android graphics lib), also OpenJDK 8 for iOS~~
 
 ## To do
-- Create a CMakeLists.txt for building linker64.
+- Create a CMakeLists.txt for building linker64. Currently, you can mess up with `build.sh` script to build directly on iOS.
