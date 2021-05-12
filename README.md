@@ -11,7 +11,6 @@ Bionic Lollipop release, but linker was ported to jailbroken iOS.
 - only some syscalls translation are handled
 - buggy math (maybe because of page size is different?)
 - too big shared object can lead to loading segment fails.
-- some methods may have constant different compared to Darwin, so I had to wrap them: `mmap()`.
 
 ## What’s this for?
 - Run Linux/Android binaries on iOS (won’t fully works without emulating /proc. Also, need get a newer bionic clone to support GNU hash style).
