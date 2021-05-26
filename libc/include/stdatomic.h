@@ -32,8 +32,14 @@
 
 #include <sys/cdefs.h>
 
+#if defined(__GNUC__) && !defined(__GNUC_PREREQ)
+/* Duplicate definition here, since the mingw sys/cdefs.h omits the  */
+/* definition, and this needs to be usable there.                    */
+#define	__GNUC_PREREQ(x, y)    \
+	((__GNUC__ == (x) && __GNUC_MINOR__ >= (y)) || (__GNUC__ > (x)))
+#endif /* __GNUC__ && ... */
 
-#if defined(__cplusplus) && defined(_USING_LIBCXX)
+#if defined(__cplusplus) && __cplusplus >= 201103L && defined(_USING_LIBCXX)
 # ifdef __clang__
 #  if __has_feature(cxx_atomic)
 #   define _STDATOMIC_HAVE_ATOMIC
@@ -89,6 +95,7 @@ using std::atomic_signal_fence;
 using std::memory_order;
 using std::memory_order_relaxed;
 using std::memory_order_consume;
+using std::memory_order_acquire;
 using std::memory_order_release;
 using std::memory_order_acq_rel;
 using std::memory_order_seq_cst;

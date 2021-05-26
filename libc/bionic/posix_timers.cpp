@@ -26,13 +26,15 @@
  * SUCH DAMAGE.
  */
 
-#include "pthread_internal.h"
-#include "private/bionic_futex.h"
 #include "private/kernel_sigset_t.h"
 
 #include <errno.h>
+#include <malloc.h>
+#include <pthread.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 // System calls.
 extern "C" int __rt_sigtimedwait(const sigset_t*, siginfo_t*, const struct timespec*, size_t);
@@ -58,10 +60,11 @@ struct PosixTimer {
 
   int sigev_notify;
 
-  // These fields are only needed for a SIGEV_THREAD timer.
+  // The fields below are only needed for a SIGEV_THREAD timer.
   pthread_t callback_thread;
   void (*callback)(sigval_t);
   sigval_t callback_argument;
+  atomic_bool deleted;  // Set when the timer is deleted, to prevent further calling of callback.
 };
 
 static __kernel_timer_t to_kernel_timer_id(timer_t timer) {
@@ -85,6 +88,11 @@ static void* __timer_thread_start(void* arg) {
 
     if (si.si_code == SI_TIMER) {
       // This signal was sent because a timer fired, so call the callback.
+
+      // All events to the callback will be ignored when the timer is deleted.
+      if (atomic_load(&timer->deleted) == true) {
+        continue;
+      }
       timer->callback(timer->callback_argument);
     } else if (si.si_code == SI_TKILL) {
       // This signal was sent because someone wants us to exit.
@@ -95,6 +103,7 @@ static void* __timer_thread_start(void* arg) {
 }
 
 static void __timer_thread_stop(PosixTimer* timer) {
+  atomic_store(&timer->deleted, true);
   pthread_kill(timer->callback_thread, TIMER_SIGNAL);
 }
 
@@ -121,6 +130,7 @@ int timer_create(clockid_t clock_id, sigevent* evp, timer_t* timer_id) {
   // Otherwise, this must be SIGEV_THREAD timer...
   timer->callback = evp->sigev_notify_function;
   timer->callback_argument = evp->sigev_value;
+  atomic_init(&timer->deleted, false);
 
   // Check arguments that the kernel doesn't care about but we do.
   if (timer->callback == NULL) {
@@ -164,10 +174,10 @@ int timer_create(clockid_t clock_id, sigevent* evp, timer_t* timer_id) {
     return -1;
   }
 
-  // Give the thread a meaningful name.
+  // Give the thread a specific meaningful name.
   // It can't do this itself because the kernel timer isn't created until after it's running.
-  char name[32];
-  snprintf(name, sizeof(name), "POSIX interval timer %d", to_kernel_timer_id(timer));
+  char name[16]; // 16 is the kernel-imposed limit.
+  snprintf(name, sizeof(name), "POSIX timer %d", to_kernel_timer_id(timer));
   pthread_setname_np(timer->callback_thread, name);
 
   *timer_id = timer;
@@ -193,14 +203,19 @@ int timer_delete(timer_t id) {
   return 0;
 }
 
-// http://pubs.opengroup.org/onlinepubs/9699919799/functions/timer_getoverrun.html
+// http://pubs.opengroup.org/onlinepubs/9699919799/functions/timer_gettime.html
 int timer_gettime(timer_t id, itimerspec* ts) {
   return __timer_gettime(to_kernel_timer_id(id), ts);
 }
 
-// http://pubs.opengroup.org/onlinepubs/9699919799/functions/timer_getoverrun.html
+// http://pubs.opengroup.org/onlinepubs/9699919799/functions/timer_settime.html
+// When using timer_settime to disarm a repeatable SIGEV_THREAD timer with a very small
+// period (like below 1ms), the kernel may continue to send events to the callback thread
+// for a few extra times. This behavior is fine because in POSIX standard: The effect of
+// disarming or resetting a timer with pending expiration notifications is unspecified.
 int timer_settime(timer_t id, int flags, const itimerspec* ts, itimerspec* ots) {
-  return __timer_settime(to_kernel_timer_id(id), flags, ts, ots);
+  PosixTimer* timer= reinterpret_cast<PosixTimer*>(id);
+  return __timer_settime(timer->kernel_timer_id, flags, ts, ots);
 }
 
 // http://pubs.opengroup.org/onlinepubs/9699919799/functions/timer_getoverrun.html

@@ -64,17 +64,31 @@ __LIBC_HIDDEN__ void do_arm64_start(void* raw_args) {
  * then be able to access the stack as prepared by the kernel's execve system
  * call (via the first argument).
  */
+#ifndef __APPLE__
 __asm__ (
 "        .text                      \n"
 "        .align  2                  \n"
 "        .global _start             \n"
+"        .hidden _start             \n"
+"        .type   _start, %function  \n"
+"_start:                            \n"
+"        add     x0, sp, xzr        \n"
+"        b       do_arm64_start   \n"
+"        .size   _start, .-_start   \n"
+);
+#else
+__asm__ (
+"        .text                      \n"
+"        .align  2                  \n"
+"        .global __start             \n"
 // "        .hidden _start             \n"
 // "        .type   _start, %function  \n"
-"_start:                            \n"
+"__start:                            \n"
 "        add     x0, sp, xzr        \n"
 "        b       do_arm64_start   \n"
 // "        .size   _start, .-_start   \n"
 );
+#endif
 
 #include "../../arch-common/bionic/__dso_handle.h"
 #include "../../arch-common/bionic/atexit.h"

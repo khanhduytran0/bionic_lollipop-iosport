@@ -32,6 +32,15 @@ template<typename T, typename Allocator>
 class LinkedList {
  public:
   LinkedList() : head_(nullptr), tail_(nullptr) {}
+  ~LinkedList() {
+    clear();
+  }
+
+  LinkedList(LinkedList&& that) {
+    this->head_ = that.head_;
+    this->tail_ = that.tail_;
+    that.head_ = that.tail_ = nullptr;
+  }
 
   void push_front(T* const element) {
     LinkedListEntry<T>* new_entry = Allocator::alloc();
@@ -72,6 +81,14 @@ class LinkedList {
     return element;
   }
 
+  T* front() const {
+    if (head_ == nullptr) {
+      return nullptr;
+    }
+
+    return head_->element;
+  }
+
   void clear() {
     while (head_ != nullptr) {
       LinkedListEntry<T>* p = head_;
@@ -83,30 +100,75 @@ class LinkedList {
   }
 
   template<typename F>
-  void for_each(F&& action) {
+  void for_each(F action) const {
+    visit([&] (T* si) {
+      action(si);
+      return true;
+    });
+  }
+
+  template<typename F>
+  bool visit(F action) const {
     for (LinkedListEntry<T>* e = head_; e != nullptr; e = e->next) {
-      if (e->element != nullptr) {
-        action(e->element);
+      if (!action(e->element)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  template<typename F>
+  void remove_if(F predicate) {
+    for (LinkedListEntry<T>* e = head_, *p = nullptr; e != nullptr;) {
+      if (predicate(e->element)) {
+        LinkedListEntry<T>* next = e->next;
+        if (p == nullptr) {
+          head_ = next;
+        } else {
+          p->next = next;
+        }
+        Allocator::free(e);
+        e = next;
+      } else {
+        p = e;
+        e = e->next;
       }
     }
   }
 
   template<typename F>
-  void remove_if(F&& predicate) {
+  T* find_if(F predicate) const {
     for (LinkedListEntry<T>* e = head_; e != nullptr; e = e->next) {
-      if (e->element != nullptr && predicate(e->element)) {
-        e->element = nullptr;
+      if (predicate(e->element)) {
+        return e->element;
       }
     }
+
+    return nullptr;
   }
 
-  bool contains(const T* el) {
+  size_t copy_to_array(T* array[], size_t array_length) const {
+    size_t sz = 0;
+    for (LinkedListEntry<T>* e = head_; sz < array_length && e != nullptr; e = e->next) {
+      array[sz++] = e->element;
+    }
+
+    return sz;
+  }
+
+  bool contains(const T* el) const {
     for (LinkedListEntry<T>* e = head_; e != nullptr; e = e->next) {
-      if (e->element != nullptr && e->element == el) {
+      if (e->element == el) {
         return true;
       }
     }
     return false;
+  }
+
+  static LinkedList make_list(T* const element) {
+    LinkedList<T, Allocator> one_element_list;
+    one_element_list.push_back(element);
+    return one_element_list;
   }
 
  private:

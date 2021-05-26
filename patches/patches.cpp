@@ -4,6 +4,8 @@
 #include <pthread.h>
 #include <signal.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 // #include <sys/prctl.h>
 #include <sys/syscall.h>
@@ -12,6 +14,8 @@
 #include <sys/mman.h>
 
 #include "private/KernelArgumentBlock.h"
+
+// Basic syscalls translation
 
 // see man(2) prctl, specifically the section about PR_GET_NAME
 #define MAX_TASK_NAME_LEN (16)
@@ -41,7 +45,6 @@
 #define PROT_NORESERVE_DARWIN 0
 #define PROT_JIT_DARWIN 0
 
-// Define values between Linux and Darwin are different
 #define PROT_NONE_DARWIN 0x00
 #define PROT_READ_DARWIN 0x01
 #define PROT_WRITE_DARWIN 0x02
@@ -78,15 +81,17 @@
         if (1) return MAP_FAILED; \
     }
 
-        // PORT_CUSTOM(NAME, FLAG, FLAG);
+    // PORT_CUSTOM(NAME, FLAG, FLAG);
 
 extern "C" {
+
 void* mmap64(void *addr, size_t length, int prot, int flags, int fd, off64_t offset) {
     static void* (*darwin_mmap_p)(void *, unsigned long, int, int, int, long long);
     if (!darwin_mmap_p) darwin_mmap_p = (void *(*)(void *, unsigned long, int, int, int, long long)) dlsym(RTLD_NEXT, "mmap");
     // printf("addr=%p\n", darwin_mmap_p);
     if (!darwin_mmap_p) {
         printf("%s\n", dlerror());
+        return NULL;
     }
 
     int isprot;
@@ -125,12 +130,67 @@ void* mmap64(void *addr, size_t length, int prot, int flags, int fd, off64_t off
     // prot_converted |= PROT_WRITE;
     // flags_converted |= MAP_JIT;
 
-    // printf("mmap(addr=%p, length=%d, prot=%d, flags=%d, fd=%d, offset=%d)\n", addr, length, prot_converted, flags_converted, fd, offset);
+    printf("mmap(addr=%p, length=%d, prot=%d, flags=%d, fd=%d, offset=%d)\n", addr, length, prot_converted, flags_converted, fd, offset);
+
+    // printf("mmap length=%lfM\n", length / 1048576.0);
 
     return darwin_mmap_p(addr, (long unsigned int) length, prot_converted, flags_converted, fd, (long long) offset);
 }
 void* mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset) {
     return mmap64(addr, length, prot, flags, fd, (off64_t) offset);
+}
+
+ssize_t pread64(int fd, void *buf, size_t count, off_t offset) {
+    char *data = (char*) malloc(count);
+    if (offset < 0 || data == NULL) {
+        if (offset < 0) {
+            errno = EINVAL;
+        }
+        return -1;
+    }
+
+    if (read(fd, data, count) == -1) {
+        return -1;
+    }
+
+    size_t remaining = count - offset;
+    if ((size_t) offset > count) {
+        remaining = 0;
+    }
+    size_t n = count;
+    if (n > remaining) {
+        n = remaining;
+    }
+
+    memcpy(buf, data + offset, n);
+    free(data);
+    return n;
+}
+
+ssize_t pread(int fd, void* buf, size_t count, off_t offset) {
+  return pread64(fd, buf, count, (off64_t) offset);
+}
+
+ssize_t pwrite64(int fd, const void *buf, size_t count, off_t offset) {
+    if (offset < 0) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    size_t remaining = count - offset;
+    if ((size_t) offset > count) {
+        remaining = 0;
+    }
+    size_t n = count;
+    if (n > remaining) {
+        n = remaining;
+    }
+
+    return write(fd, (const char*) buf + offset, n);
+}
+
+ssize_t pwrite(int fd, const void* buf, size_t byte_count, off_t offset) {
+  return pwrite64(fd, buf, byte_count, (off64_t) offset);
 }
 
 int

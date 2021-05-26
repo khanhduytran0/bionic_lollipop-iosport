@@ -31,6 +31,7 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include <sys/resource.h>
+#include <unistd.h>
 
 #include "private/bionic_string_utils.h"
 #include "private/ErrnoRestorer.h"
@@ -126,8 +127,12 @@ static int __pthread_attr_getstack_main_thread(void** stack_base, size_t* stack_
     stack_limit.rlim_cur = 8 * 1024 * 1024;
   }
 
-  // It doesn't matter which thread we are; we're just looking for "[stack]".
-  FILE* fp = fopen("/proc/self/maps", "re");
+  // It shouldn't matter which thread we are because we're just looking for "[stack]", but
+  // valgrind seems to mess with the stack enough that the kernel will report "[stack:pid]"
+  // instead if you look in /proc/self/maps, so we need to look in /proc/pid/task/pid/maps.
+  char path[64];
+  snprintf(path, sizeof(path), "/proc/self/task/%d/maps", getpid());
+  FILE* fp = fopen(path, "re");
   if (fp == NULL) {
     return errno;
   }
@@ -143,13 +148,10 @@ static int __pthread_attr_getstack_main_thread(void** stack_base, size_t* stack_
       }
     }
   }
-  __libc_fatal("No [stack] line found in /proc/self/maps!");
+  __libc_fatal("No [stack] line found in \"%s\"!", path);
 }
 
 int pthread_attr_getstack(const pthread_attr_t* attr, void** stack_base, size_t* stack_size) {
-  if ((attr->flags & PTHREAD_ATTR_FLAG_MAIN_THREAD) != 0) {
-    return __pthread_attr_getstack_main_thread(stack_base, stack_size);
-  }
   *stack_base = attr->stack_base;
   *stack_size = attr->stack_size;
   return 0;
@@ -166,7 +168,18 @@ int pthread_attr_getguardsize(const pthread_attr_t* attr, size_t* guard_size) {
 }
 
 int pthread_getattr_np(pthread_t t, pthread_attr_t* attr) {
-  *attr = reinterpret_cast<pthread_internal_t*>(t)->attr;
+  pthread_internal_t* thread = reinterpret_cast<pthread_internal_t*>(t);
+  *attr = thread->attr;
+  // We prefer reading join_state here to setting thread->attr.flags in pthread_detach.
+  // Because data race exists in the latter case.
+  if (atomic_load(&thread->join_state) == THREAD_DETACHED) {
+    attr->flags |= PTHREAD_ATTR_FLAG_DETACHED;
+  }
+  // The main thread's stack information is not stored in thread->attr, and we need to
+  // collect that at runtime.
+  if (thread->tid == getpid()) {
+    return __pthread_attr_getstack_main_thread(&attr->stack_base, &attr->stack_size);
+  }
   return 0;
 }
 

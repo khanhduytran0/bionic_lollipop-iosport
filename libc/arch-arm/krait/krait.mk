@@ -7,7 +7,13 @@ libc_bionic_src_files_arm += \
 
 # Use cortex-a15 versions of strcat/strcpy/strlen and standard memmove
 libc_bionic_src_files_arm += \
+    arch-arm/cortex-a15/bionic/stpcpy.S \
     arch-arm/cortex-a15/bionic/strcat.S \
     arch-arm/cortex-a15/bionic/strcpy.S \
     arch-arm/cortex-a15/bionic/strlen.S \
-    bionic/memmove.c \
+
+libc_bionic_src_files_arm += \
+    arch-arm/generic/bionic/memcmp.S \
+
+libc_bionic_src_files_arm += \
+    arch-arm/denver/bionic/memmove.S \

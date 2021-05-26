@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2010 The Android Open Source Project
+ * Copyright (C) 2008 The Android Open Source Project
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -37,11 +37,12 @@
 // By default, traces are sent to logcat, with the "linker" tag. You can
 // change this to go to stdout instead by setting the definition of
 // LINKER_DEBUG_TO_LOG to 0.
-// #define LINKER_DEBUG_TO_LOG  1
+#define LINKER_DEBUG_TO_LOG  1
 
 #define TRACE_DEBUG          1
 #define DO_TRACE_LOOKUP      1
 #define DO_TRACE_RELO        1
+#define DO_TRACE_IFUNC       1
 #define TIMING               0
 #define STATS                0
 #define COUNT_PAGES          0
@@ -80,5 +81,24 @@ __LIBC_HIDDEN__ extern int g_ld_debug_verbosity;
 #endif /* TRACE_DEBUG */
 
 #define TRACE_TYPE(t, x...)   do { if (DO_TRACE_##t) { TRACE(x); } } while (0)
+
+#if COUNT_PAGES
+extern uint32_t bitmask[];
+#if defined(__LP64__)
+#define MARK(offset) \
+    do { \
+      if ((((offset) >> 12) >> 5) < 4096) \
+          bitmask[((offset) >> 12) >> 5] |= (1 << (((offset) >> 12) & 31)); \
+    } while (0)
+#else
+#define MARK(offset) \
+    do { \
+      bitmask[((offset) >> 12) >> 3] |= (1 << (((offset) >> 12) & 7)); \
+    } while (0)
+#endif
+#else
+#define MARK(x) do {} while (0)
+
+#endif
 
 #endif /* _LINKER_DEBUG_H_ */

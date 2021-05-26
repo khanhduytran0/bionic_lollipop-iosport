@@ -38,41 +38,27 @@
 
 #include <machine/asm.h>
 
-#ifndef __APPLE__
 #define ENTRY(f) \
     .text; \
     .globl f; \
-    _ALIGN_TEXT; \
+    .align __bionic_asm_align; \
     .type f, __bionic_asm_function_type; \
     f: \
     __bionic_asm_custom_entry(f); \
-    .cfi_startproc \
+//    .cfi_startproc \
 
 #define END(f) \
-    .cfi_endproc; \
+//    .cfi_endproc; \
     .size f, .-f; \
     __bionic_asm_custom_end(f) \
-
-#else
-#define ENTRY(f) \
-    .text; \
-    .globl f; \
-    _ALIGN_TEXT; \
-    .type f, __bionic_asm_function_type; \
-    f: \
-    __bionic_asm_custom_entry(f); \
-    // .cfi_startproc \
-
-#define END(f) \
-    // .cfi_endproc; \
-    .size f, .-f; \
-    __bionic_asm_custom_end(f) \
-
-#endif
 
 /* Like ENTRY, but with hidden visibility. */
 #define ENTRY_PRIVATE(f) \
     ENTRY(f); \
     .hidden f \
+
+#define ALIAS_SYMBOL(alias, original) \
+    .globl alias; \
+    .equ alias, original
 
 #endif /* _PRIVATE_BIONIC_ASM_H_ */

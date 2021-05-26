@@ -38,6 +38,14 @@
 #ifndef	_STDIO_H_
 #define	_STDIO_H_
 
+/*
+ * This file must contain a reference to __gnuc_va_list so that GCC's
+ * fixincludes knows that that's what's being used for va_list, and so
+ * to leave our <stdio.h> alone. (fixincludes gets in the way of pointing
+ * one toolchain at various different sets of platform headers.)
+ * If you alter this comment, be sure to keep "__gnuc_va_list" in it!
+ */
+
 #include <sys/cdefs.h>
 #include <sys/types.h>
 
@@ -47,7 +55,7 @@
 #define __need_NULL
 #include <stddef.h>
 
-#define	_FSTDIO			/* Define for new stdio with functions. */
+__BEGIN_DECLS
 
 typedef off_t fpos_t;		/* stdio file position type */
 
@@ -136,9 +144,16 @@ typedef	struct __sFILE {
 	fpos_t	_offset;	/* current lseek offset */
 } FILE;
 
-__BEGIN_DECLS
+/* Legacy BSD implementation of stdin/stdout/stderr. */
 extern FILE __sF[];
-__END_DECLS
+/* More obvious implementation. */
+extern FILE* stdin;
+extern FILE* stdout;
+extern FILE* stderr;
+/* C99 and earlier plus current C++ standards say these must be macros. */
+#define stdin stdin
+#define stdout stdout
+#define stderr stderr
 
 #define	__SLBF	0x0001		/* line buffered */
 #define	__SNBF	0x0002		/* unbuffered */
@@ -190,25 +205,13 @@ __END_DECLS
 #define	L_tmpnam	1024	/* XXX must be == PATH_MAX */
 #define	TMP_MAX		308915776
 
-/* Always ensure that these are consistent with <fcntl.h> and <unistd.h>! */
-#ifndef SEEK_SET
-#define	SEEK_SET	0	/* set file offset to offset */
-#endif
-#ifndef SEEK_CUR
-#define	SEEK_CUR	1	/* set file offset to current plus offset */
-#endif
-#ifndef SEEK_END
-#define	SEEK_END	2	/* set file offset to EOF plus offset */
-#endif
-
-#define	stdin	(&__sF[0])
-#define	stdout	(&__sF[1])
-#define	stderr	(&__sF[2])
+#define SEEK_SET 0
+#define SEEK_CUR 1
+#define SEEK_END 2
 
 /*
  * Functions defined in ANSI C standard.
  */
-__BEGIN_DECLS
 void	 clearerr(FILE *);
 int	 fclose(FILE *);
 int	 feof(FILE *);
@@ -261,27 +264,38 @@ int vdprintf(int, const char * __restrict, __va_list) __printflike(2, 0);
 
 #ifndef __AUDIT__
 #if !defined(__STDC_VERSION__) || __STDC_VERSION__ < 201112L
-char* gets(char*) __warnattr("gets is very unsafe; consider using fgets");
+char* gets(char*) __attribute__((deprecated("gets is unsafe, use fgets instead")));
 #endif
 int sprintf(char* __restrict, const char* __restrict, ...)
     __printflike(2, 3) __warnattr("sprintf is often misused; please use snprintf");
-char* tmpnam(char*) __warnattr("tmpnam possibly used unsafely; consider using mkstemp");
 int vsprintf(char* __restrict, const char* __restrict, __va_list)
     __printflike(2, 0) __warnattr("vsprintf is often misused; please use vsnprintf");
+char* tmpnam(char*) __attribute__((deprecated("tmpnam is unsafe, use mkstemp or tmpfile instead")));
 #if __XPG_VISIBLE
 char* tempnam(const char*, const char*)
-    __warnattr("tempnam possibly used unsafely; consider using mkstemp");
+    __attribute__((deprecated("tempnam is unsafe, use mkstemp or tmpfile instead")));
 #endif
 #endif
 
 extern int rename(const char*, const char*);
 extern int renameat(int, const char*, int, const char*);
 
+#if defined(__USE_FILE_OFFSET64)
+/* Not possible. */
+int	 fgetpos(FILE * __restrict, fpos_t * __restrict)
+	__attribute__((__error__("not available with _FILE_OFFSET_BITS=64")));
+int	 fsetpos(FILE *, const fpos_t *)
+	__attribute__((__error__("not available with _FILE_OFFSET_BITS=64")));
+int	 fseeko(FILE *, off_t, int)
+	__attribute__((__error__("not available with _FILE_OFFSET_BITS=64")));
+off_t	 ftello(FILE *)
+	__attribute__((__error__("not available with _FILE_OFFSET_BITS=64")));
+#else
 int	 fgetpos(FILE * __restrict, fpos_t * __restrict);
 int	 fsetpos(FILE *, const fpos_t *);
-
 int	 fseeko(FILE *, off_t, int);
 off_t	 ftello(FILE *);
+#endif
 
 #if __ISO_C_VISIBLE >= 1999 || __BSD_VISIBLE
 int	 snprintf(char * __restrict, size_t, const char * __restrict, ...)
@@ -296,16 +310,12 @@ int	 vsscanf(const char * __restrict, const char * __restrict, __va_list)
 		__scanflike(2, 0);
 #endif /* __ISO_C_VISIBLE >= 1999 || __BSD_VISIBLE */
 
-__END_DECLS
-
-
 /*
  * Functions defined in POSIX 1003.1.
  */
 #if __BSD_VISIBLE || __POSIX_VISIBLE || __XPG_VISIBLE
 #define	L_ctermid	1024	/* size for ctermid(); PATH_MAX */
 
-__BEGIN_DECLS
 FILE	*fdopen(int, const char *);
 int	 fileno(FILE *);
 
@@ -329,7 +339,10 @@ int	 putc_unlocked(int, FILE *);
 int	 putchar_unlocked(int);
 #endif /* __POSIX_VISIBLE >= 199506 */
 
-__END_DECLS
+#if __POSIX_VISIBLE >= 200809
+FILE* fmemopen(void*, size_t, const char*);
+FILE* open_memstream(char**, size_t*);
+#endif /* __POSIX_VISIBLE >= 200809 */
 
 #endif /* __BSD_VISIBLE || __POSIX_VISIBLE || __XPG_VISIBLE */
 
@@ -337,7 +350,6 @@ __END_DECLS
  * Routines that are purely local.
  */
 #if __BSD_VISIBLE
-__BEGIN_DECLS
 int	 asprintf(char ** __restrict, const char * __restrict, ...)
 		__printflike(2, 3);
 char	*fgetln(FILE * __restrict, size_t * __restrict);
@@ -347,25 +359,30 @@ int	 setlinebuf(FILE *);
 int	 vasprintf(char ** __restrict, const char * __restrict,
     __va_list)
 		__printflike(2, 0);
-__END_DECLS
+
+void clearerr_unlocked(FILE*);
+int feof_unlocked(FILE*);
+int ferror_unlocked(FILE*);
 
 /*
  * Stdio function-access interface.
  */
-__BEGIN_DECLS
 FILE	*funopen(const void *,
 		int (*)(void *, char *, int),
 		int (*)(void *, const char *, int),
 		fpos_t (*)(void *, fpos_t, int),
 		int (*)(void *));
-__END_DECLS
+
 #define	fropen(cookie, fn) funopen(cookie, fn, 0, 0, 0)
 #define	fwopen(cookie, fn) funopen(cookie, 0, fn, 0, 0)
 #endif /* __BSD_VISIBLE */
 
-#if defined(__BIONIC_FORTIFY)
+extern char* __fgets_chk(char*, int, FILE*, size_t);
+extern char* __fgets_real(char*, int, FILE*) __RENAME(fgets);
+__errordecl(__fgets_too_big_error, "fgets called with size bigger than buffer");
+__errordecl(__fgets_too_small_error, "fgets called with size less than zero");
 
-__BEGIN_DECLS
+#if defined(__BIONIC_FORTIFY)
 
 __BIONIC_FORTIFY_INLINE
 __printflike(3, 0)
@@ -411,11 +428,6 @@ int sprintf(char *dest, const char *format, ...)
 }
 #endif
 
-extern char* __fgets_chk(char*, int, FILE*, size_t);
-extern char* __fgets_real(char*, int, FILE*) __asm__(__USER_LABEL_PREFIX__ "fgets");
-__errordecl(__fgets_too_big_error, "fgets called with size bigger than buffer");
-__errordecl(__fgets_too_small_error, "fgets called with size less than zero");
-
 #if !defined(__clang__)
 
 __BIONIC_FORTIFY_INLINE
@@ -450,8 +462,8 @@ char *fgets(char* dest, int size, FILE* stream) {
 
 #endif /* !defined(__clang__) */
 
-__END_DECLS
-
 #endif /* defined(__BIONIC_FORTIFY) */
+
+__END_DECLS
 
 #endif /* _STDIO_H_ */

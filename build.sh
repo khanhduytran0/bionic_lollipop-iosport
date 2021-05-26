@@ -12,6 +12,7 @@ export CFLAGS="\
   -Ilibc/include \
   -Ilibc/kernel/uapi \
   -Ilibc/kernel/uapi/asm-arm64 \
+  -Ilibc/stdio \
   -Ilinker \
   -Ipatches
 "
@@ -19,9 +20,8 @@ export CFLAGS="\
 clang++ -dynamiclib $CFLAGS -o linker64 \
   -undefined dynamic_lookup \
 \
-  -D__errno=errno \
-\
   patches/patches.cpp \
+  libc/bionic/__errno.cpp \
   libc/bionic/libc_logging.cpp \
   libc/arch-arm64/bionic/crtbegin.c \
   linker/arch/arm64/begin.S \

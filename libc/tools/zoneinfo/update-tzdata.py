@@ -13,8 +13,11 @@ import sys
 import tarfile
 import tempfile
 
-regions = ['africa', 'antarctica', 'asia', 'australasia', 'backward',
-           'etcetera', 'europe', 'northamerica', 'southamerica']
+regions = ['africa', 'antarctica', 'asia', 'australasia',
+           'etcetera', 'europe', 'northamerica', 'southamerica',
+           # These two deliberately come last so they override what came
+           # before (and each other).
+           'backward', 'backzone' ]
 
 def CheckDirExists(dir, dirname):
   if not os.path.isdir(dir):
@@ -30,9 +33,12 @@ CheckDirExists(bionic_libc_zoneinfo_dir, 'bionic/libc/zoneinfo')
 CheckDirExists(bionic_libc_tools_zoneinfo_dir, 'bionic/libc/tools/zoneinfo')
 print 'Found bionic in %s ...' % bionic_dir
 
-# Find the icu4c directory.
-icu_dir = os.path.realpath('%s/../external/icu/icu4c/source' % bionic_dir)
-CheckDirExists(icu_dir, 'external/icu/icu4c/source')
+# Find the icu directory.
+icu_dir = os.path.realpath('%s/../external/icu' % bionic_dir)
+icu4c_dir = os.path.realpath('%s/icu4c/source' % icu_dir)
+icu4j_dir = os.path.realpath('%s/icu4j' % icu_dir)
+CheckDirExists(icu4c_dir, 'external/icu/icu4c/source')
+CheckDirExists(icu4j_dir, 'external/icu/icu4j')
 print 'Found icu in %s ...' % icu_dir
 
 
@@ -49,16 +55,16 @@ def WriteSetupFile():
       fields = line.split()
       if fields:
         if fields[0] == 'Link':
-          links.append('%s %s %s\n' % (fields[0], fields[1], fields[2]))
+          links.append('%s %s %s' % (fields[0], fields[1], fields[2]))
           zones.append(fields[2])
         elif fields[0] == 'Zone':
           zones.append(fields[1])
   zones.sort()
 
   setup = open('setup', 'w')
-  for link in links:
-    setup.write(link)
-  for zone in zones:
+  for link in sorted(set(links)):
+    setup.write('%s\n' % link)
+  for zone in sorted(set(zones)):
     setup.write('%s\n' % zone)
   setup.close()
 
@@ -113,31 +119,55 @@ def BuildIcuToolsAndData(data_filename):
 
   # Build the ICU tools.
   print 'Configuring ICU tools...'
-  subprocess.check_call(['%s/runConfigureICU' % icu_dir, 'Linux'])
-  print 'Making ICU tools...'
-  subprocess.check_call(['make', '-j32'])
+  subprocess.check_call(['%s/runConfigureICU' % icu4c_dir, 'Linux'])
 
   # Run the ICU tools.
   os.chdir('tools/tzcode')
+
+  # The tz2icu tool only picks up icuregions and icuzones in they are in the CWD
+  for icu_data_file in [ 'icuregions', 'icuzones']:
+    icu_data_file_source = '%s/tools/tzcode/%s' % (icu4c_dir, icu_data_file)
+    icu_data_file_symlink = './%s' % icu_data_file
+    os.symlink(icu_data_file_source, icu_data_file_symlink)
+
   shutil.copyfile('%s/%s' % (original_working_dir, data_filename), data_filename)
   print 'Making ICU data...'
+  # The Makefile assumes the existence of the bin directory.
+  os.mkdir('%s/bin' % icu_working_dir)
   subprocess.check_call(['make'])
 
-  # Copy the output files to their ultimate destination.
-  icu_txt_data_dir = '%s/data/misc' % icu_dir
+  # Copy the source file to its ultimate destination.
+  icu_txt_data_dir = '%s/data/misc' % icu4c_dir
   print 'Copying zoneinfo64.txt to %s ...' % icu_txt_data_dir
   shutil.copy('zoneinfo64.txt', icu_txt_data_dir)
 
+  # Regenerate the .dat file.
   os.chdir(icu_working_dir)
-  icu_dat_data_dir = '%s/stubdata' % icu_dir
+  subprocess.check_call(['make', 'INCLUDE_UNI_CORE_DATA=1', '-j32'])
+
+  # Copy the .dat file to its ultimate destination.
+  icu_dat_data_dir = '%s/stubdata' % icu4c_dir
   datfiles = glob.glob('data/out/tmp/icudt??l.dat')
   if len(datfiles) != 1:
     print 'ERROR: Unexpectedly found %d .dat files (%s). Halting.' % (len(datfiles), datfiles)
     sys.exit(1)
-
   datfile = datfiles[0]
   print 'Copying %s to %s ...' % (datfile, icu_dat_data_dir)
   shutil.copy(datfile, icu_dat_data_dir)
+
+  # Generate the ICU4J .jar files
+  os.chdir('%s/data' % icu_working_dir)
+  subprocess.check_call(['make', 'icu4j-data'])
+
+  # Copy the ICU4J .jar files to their ultimate destination.
+  icu_jar_data_dir = '%s/main/shared/data' % icu4j_dir
+  jarfiles = glob.glob('out/icu4j/*.jar')
+  if len(jarfiles) != 2:
+    print 'ERROR: Unexpectedly found %d .jar files (%s). Halting.' % (len(jarfiles), jarfiles)
+    sys.exit(1)
+  for jarfile in jarfiles:
+    print 'Copying %s to %s ...' % (jarfile, icu_jar_data_dir)
+    shutil.copy(jarfile, icu_jar_data_dir)
 
   # Switch back to the original working cwd.
   os.chdir(original_working_dir)
@@ -162,9 +192,10 @@ def BuildBionicToolsAndData(data_filename):
 
   print 'Calling zic(1)...'
   os.mkdir('data')
-  for region in regions:
-    if region != 'backward':
-      subprocess.check_call(['zic', '-d', 'data', 'extracted/%s' % region])
+  zic_inputs = [ 'extracted/%s' % x for x in regions ]
+  zic_cmd = ['zic', '-d', 'data' ]
+  zic_cmd.extend(zic_inputs)
+  subprocess.check_call(zic_cmd)
 
   WriteSetupFile()
 

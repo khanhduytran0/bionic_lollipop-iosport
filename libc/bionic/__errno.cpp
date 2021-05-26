@@ -31,6 +31,13 @@
 
 #include "private/bionic_tls.h"
 
+#ifndef __APPLE__
 volatile int*  __errno() {
   return reinterpret_cast<int*>(&(__get_tls()[TLS_SLOT_ERRNO]));
 }
+#else
+extern "C" int* __error(void);
+volatile int*  __errno() {
+  return __error();
+}
+#endif
