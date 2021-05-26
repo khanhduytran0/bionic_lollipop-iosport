@@ -1,3 +1,25 @@
+
+# bionic_lollipop-iosport
+Android linker64 for jailbroken iOS.
+
+## What can it do?
+- can load ELF .so file (even file with page size 4k on 16k devices for unknown reason).
+- lib depends are being warned instead of fatal error if not found (workaround ignoring libc.so, libm.so and other libraries).
+- symbols lookup will find to Darwin symbols if none found in loaded ELF libraries.
+- tweaked to print all of undefined symbols.
+
+## Known issues and limitations
+- only some syscalls translation are handled.
+- buggy stuff (maybe because of page size is different?).
+- too big shared object can lead to loading segment fails.
+
+## What’s this for?
+- Run Linux/Android binaries on iOS (won’t fully works without emulating /proc.
+
+## To do
+- Create a CMakeLists.txt for building linker64. Currently, you can mess up with `build.sh` script to build directly on iOS.
+
+=================
 Working on bionic
 =================
 
@@ -271,3 +293,4 @@ are the known ABI bugs in LP32:
 
  * `sigset_t` is too small on ARM and x86 (but correct on MIPS), so support
    for real-time signals is broken. <http://b/5828899>
+   
